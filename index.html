@@ -674,6 +674,10 @@
     */
 
     window.TECHSUPPORT = {
+      // Make.com webhook that receives every enquiry. Leave it as "" to switch the form off;
+      // the form will then show a configuration error instead of pretending to send.
+      makeWebhookUrl: "https://hook.eu1.make.com/0r15gqma1ssmc3wehpcwkes5lvi53dp5",
+
       // Contact details shown on the page. These are placeholders, not real details.
       contact: {
         email: "sales@example.com",
@@ -748,13 +752,12 @@
     /*
       TechSupport product page behaviour.
       Content comes from the editable block above (window.TECHSUPPORT).
-      The form posts to /api/product-enquiry on this site, never to Make directly.
+      The form sends each enquiry straight to the Make webhook as JSON.
     */
     (function () {
       "use strict";
 
       const DATA = window.TECHSUPPORT;
-      const API_URL = "/api/product-enquiry";
       const OTHER_OPTION = "Not sure yet, please advise";
 
       const naira = new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 });
@@ -987,53 +990,62 @@
         clearStatus();
         if (!validate()) return;
 
-        const data = {
-          name: field("name").value.trim(),
-          email: field("email").value.trim(),
-          phone: field("phone").value.trim(),
-          product: field("product").value,
-          budget: field("budget").value,
-          message: field("message").value.trim(),
-          website: field("website").value,
+        const webhookUrl = (DATA.makeWebhookUrl || "").trim();
+        if (!webhookUrl) {
+          showStatus("Configuration error: the enquiry form is not connected yet (makeWebhookUrl is empty), so your enquiry was not sent. Please contact us by email or phone instead.");
+          return;
+        }
+
+        // Hidden spam-trap field: people never see it, bots often fill it in.
+        if (field("website").value) {
+          card.classList.add("sent");
+          return;
+        }
+
+        // The exact field names the Make scenario expects.
+        const payload = {
+          "Customer Name": field("name").value.trim(),
+          "Email": field("email").value.trim(),
+          "Phone": field("phone").value.trim(),
+          "Product Interested In": field("product").value,
+          "Budget": field("budget").value,
+          "Customer Message": field("message").value.trim(),
+          "Lead Source": "Product Page",
+          "Submission Date": new Date().toISOString(),
         };
 
         // Block an identical enquiry that was already sent from this page.
-        const key = JSON.stringify([data.name, data.email, data.phone, data.product, data.budget, data.message]);
+        const key = JSON.stringify([payload["Customer Name"], payload["Email"], payload["Phone"], payload["Product Interested In"], payload["Budget"], payload["Customer Message"]]);
         if (key === lastSentKey) {
           showStatus("This enquiry has already been sent. Change the details if you want to send a new one.");
           return;
         }
 
         setSubmitting(true);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
         try {
-          const res = await fetch(API_URL, {
+          const res = await fetch(webhookUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
+            body: JSON.stringify(payload),
+            signal: controller.signal,
           });
-          let result = {};
-          try { result = await res.json(); } catch (_) { /* non-JSON reply */ }
 
-          if (res.ok && result.ok) {
+          if (res.ok) {
             lastSentKey = key;
             document.getElementById("success-detail").textContent =
-              "Thanks, " + data.name.split(" ")[0] + ". Our sales team will contact you about the " + data.product + " soon.";
+              "Thanks, " + payload["Customer Name"].split(" ")[0] + ". Our sales team will contact you about the " + payload["Product Interested In"] + " soon.";
             card.classList.add("sent");
             successBox.focus();
             return;
           }
 
-          if (result.fieldErrors) {
-            Object.keys(result.fieldErrors).forEach((name) => { if (field(name)) showError(name, result.fieldErrors[name]); });
-          }
-          if (result.error === "not_configured") {
-            showStatus("Configuration error: " + result.message);
-          } else {
-            showStatus(result.message || "Something went wrong and your enquiry was not sent. Please try again.");
-          }
+          showStatus("We could not deliver your enquiry right now. Please try again in a few minutes.");
         } catch (err) {
-          showStatus("We could not reach the server. Check your internet connection and try again.");
+          showStatus("We could not send your enquiry. Check your internet connection and try again.");
         } finally {
+          clearTimeout(timer);
           setSubmitting(false);
         }
       });
