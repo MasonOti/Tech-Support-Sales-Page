@@ -8,14 +8,15 @@ This is a separate project from the Techsupport Africa enquiry page.
 
 | File | What it is |
 |---|---|
-| `index.html` | The whole page: layout, styles, product data, webhook setting and form code |
+| `index.html` | The whole page: layout, styles, product data and form code |
+| `api/enquiry.js` | Vercel server function. Receives the form and forwards it to Make using the `MAKE_PRODUCT_ENQUIRY_WEBHOOK_URL` environment variable |
 | `README.md` | This guide |
 
 ## How an enquiry travels
 
 1. A visitor clicks **Enquire About This Laptop**. The page scrolls to the form and fills in the product.
 2. They fill in their details and click **Send Enquiry**. The page checks the required fields.
-3. The page sends one JSON object straight to the Make webhook.
+3. The page sends one JSON object to its own `/api/enquiry` endpoint, which forwards it to the Make webhook. The Make address is never in the page.
 4. The success message appears only when Make replies that it accepted the data.
 
 Make receives these exact field names:

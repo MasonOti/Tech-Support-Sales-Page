@@ -650,9 +650,9 @@
     */
 
     window.TECHSUPPORT = {
-      // Make.com webhook that receives every enquiry. Leave it as "" to switch the form off;
-      // the form will then show a configuration error instead of pretending to send.
-      makeWebhookUrl: "https://hook.eu1.make.com/0r15gqma1ssmc3wehpcwkes5lvi53dp5",
+      // Enquiries are posted to our own server endpoint (api/enquiry.js), which forwards them
+      // to Make. The Make address is kept in a Vercel environment variable, not in this page.
+      enquiryEndpoint: "/api/enquiry",
 
       // Contact details shown on the page. These are placeholders, not real details.
       contact: {
@@ -981,9 +981,9 @@
         clearStatus();
         if (!validate()) return;
 
-        const webhookUrl = (DATA.makeWebhookUrl || "").trim();
-        if (!webhookUrl) {
-          showStatus("Configuration error: the enquiry form is not connected yet (makeWebhookUrl is empty), so your enquiry was not sent. Please contact us by email or phone instead.");
+        const endpoint = (DATA.enquiryEndpoint || "").trim();
+        if (!endpoint) {
+          showStatus("Configuration error: the enquiry form is not connected yet, so your enquiry was not sent. Please contact us by email or phone instead.");
           return;
         }
 
@@ -1016,7 +1016,7 @@
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), 15000);
         try {
-          const res = await fetch(webhookUrl, {
+          const res = await fetch(endpoint, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
